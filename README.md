@@ -21,6 +21,8 @@ If you see nothing or swap data empty, then create a swap file first. Run follow
 Here we may create a swapfile having double size of the physical ram. So here in the above command count=1024 is used for 1GB size. If you need 2GB then count will be 2048 and so on. 
 Now  setup the swap file we just created 
 
+chmod 600 /swapfile
+
     mkswap /swapfile
 Enable swapfile 
 
@@ -33,6 +35,11 @@ To enable swapfile after rebooting every time we need to edit the file system ta
     nano /etc/fstab
 Add the following line at the end of the file
 > /swapfile   none    swap    sw    0   0
+
+
+
+
+
 
 Now save by pressing ctrl + x, then press y and enter. 
 If you see any error opening with nano can use vim or install **nano** if not available by following command 
@@ -47,25 +54,170 @@ Now on centos 7 update repository to get the latest packages by running followin
     rpm -Uvh http://rpms.famillecollet.com/enterprise/remi-release-7.rpm
     
     sudo yum update 
+   
+   
+   
+How to Install EPEL repository on CentOS Stream 8
+Step 1: To install EPEL repo on CentOS Stream 8, run the below command:
 
+# dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+
+[OR]
+
+# dnf config-manager --set-enabled PowerTools
+# dnf install epel-release
+
+Step 2: Update the software packages
+
+dnf update
+
+Install the Extra Packages for Enterprise Linux (EPEL) and EPEL-Next repositories:
+
+# dnf config-manager --set-enabled crb
+# dnf install epel-release epel-next-release -y
+
+Upgrade the system, and reboot the machine to apply all updates:
+
+# dnf upgrade --refresh -y
+# dnf autoremove
+# shutdown -r now
+
+Install and Configure Apache
+Install Apache and the required Apache modules:
+
+$ sudo dnf install httpd httpd-tools mod_ssl mod_dav_svn -y
+Disable the welcome page:
+
+$ sudo sed -i 's/^/#&/g' /etc/httpd/conf.d/welcome.conf
+Prevent Apache from exposing files in the document root directory:
+
+$ sudo sed -i "s/Options Indexes FollowSymLinks/Options FollowSymLinks/" /etc/httpd/conf/httpd.conf
+Start the Apache service and make it start on boot:
+
+$ sudo systemctl start httpd.service
+$ sudo systemctl enable httpd.service
+4. Install and Configure Apache Subversion
+Install Apache Subversion:
+
+$ sudo dnf install subversion subversion-tools -y
+$ svnserve --version
+Specify the root directory of SVN repositories:
+
+$ sudo mkdir /srv/svn
+Create the first SVN repository named repo001:
+
+$ sudo svnadmin create /srv/svn/repo001
+$ sudo chown -R apache:apache /srv/svn/repo001
+Create another SVN repository named repo002, if necessary:
+
+$ sudo svnadmin create /srv/svn/repo002
+$ sudo chown -R apache:apache /srv/svn/repo002
+Set up a password database file /srv/svn/passwd to store user credentials. For example, the username is user001 for the first user, and the password is pass001.
+
+$ sudo htpasswd -bcm /srv/svn/passwd user001 pass001 && history -d -1
+$ sudo chown root:apache /srv/svn/passwd
+$ sudo chmod 640 /srv/svn/passwd
+If you need more users, create them the same way, but don't use the -c flag, which erases the credential file. For example, to create users user002, user003, and user004, use these commands:
+
+$ sudo htpasswd -bm /srv/svn/passwd user002 pass002 && history -d -1
+$ sudo htpasswd -bm /srv/svn/passwd user003 pass003 && history -d -1
+$ sudo htpasswd -bm /srv/svn/passwd user004 pass004 && history -d -1
+Set up a file /srv/svn/authz to store user permissions:
+
+$ sudo cp /srv/svn/repo001/conf/authz /srv/svn/authz
+For this example, assume that:
+
+User001 is the administrator who has read and write permissions on all SVN repositories.
+User002 and user003 are qualified users who have read and write permissions on both repo001 and repo002.
+User004 is a trainee who has only read permission on repo002.
+Open the user permissions file with the Nano editor:
+
+$ sudo nano /srv/svn/authz
+Edit the file as follows to grant the permissions mentioned above:
+
+[groups]
+admin = user001
+user = user002, user003
+trainee = user004
+
+[/]
+@admin = rw
+
+[repo001:/]
+@user = rw
+
+[repo002:/]
+@user = rw
+@trainee = r
+Press CTRL+O, ENTER, and CTRL+X to save the file and quit.
+
+Forbid anonymous access to both SVN repositories:
+
+$ sudo sed -i "s;# anon-access = read;anon-access = none;" /srv/svn/repo001/conf/svnserve.conf
+$ sudo sed -i "s;# anon-access = read;anon-access = none;" /srv/svn/repo002/conf/svnserve.conf
+Grant write permission on both SVN repositories to authorized users:
+
+$ sudo sed -i "s;# auth-access = write;auth-access = write;" /srv/svn/repo001/conf/svnserve.conf
+$ sudo sed -i "s;# auth-access = write;auth-access = write;" /srv/svn/repo002/conf/svnserve.conf
+Specify the password database file for both SVN repositories:
+
+$ sudo sed -i "s;# password-db = passwd;password-db = /srv/svn/passwd;" /srv/svn/repo001/conf/svnserve.conf
+$ sudo sed -i "s;# password-db = passwd;password-db = /srv/svn/passwd;" /srv/svn/repo002/conf/svnserve.conf
+Specify the user permissions file for both SVN repositories:
+
+$ sudo sed -i "s;# authz-db = authz;authz-db = /srv/svn/authz;" /srv/svn/repo001/conf/svnserve.conf
+$ sudo sed -i "s;# authz-db = authz;authz-db = /srv/svn/authz;" /srv/svn/repo002/conf/svnserve.conf
+Define permission scope for both SVN repositories:
+
+$ sudo sed -i "s;# realm = My First Repository;realm = /srv/svn/repo001;" /srv/svn/repo001/conf/svnserve.conf
+$ sudo sed -i "s;# realm = My First Repository;realm = /srv/svn/repo002;" /srv/svn/repo002/conf/svnserve.conf
+Specify the default root directory of all SVN repositories:
+
+$ sudo sed -i "s;/var/svn;/srv/svn;" /etc/sysconfig/svnserve
+Disable SELinux:
+
+$ sudo setenforce 0
+$ sudo sed -i "s/SELINUX=enforcing/SELINUX=disabled/" /etc/selinux/config
+Start the SVN server and make it automatically start on boot:
+
+$ sudo systemctl start svnserve.service
+$ sudo systemctl enable svnserve.service
+Define an available Apache virtual host:
+
+$ sudo mkdir /etc/httpd/sites-available
+$ sudo mkdir /etc/httpd/sites-enabled
+$ sudo nano /etc/httpd/sites-available/svn.example.com.conf
 Here after updating, we will install apache from remi,epel repository 
 ### Install apache2 server
-    yum --enablerepo=remi,epel install httpd
+   
+  sudo dnf upgrade --refresh -y
+  
+  
 ### Install  mysql server [mariadb]
+sudo dnf install mysql mysql-server -y
 
-    yum --enablerepo=remi,epel install mysql-server 
-It may give you error as from centos 7 all mysql repositories are replaced with mariadb. 
+sudo dnf install mysql mysql-server mysql-devel -y
+mysql --version
 
-    yum --enablerepo=remi,epel install mariadb-server
-Now to run mariadb, run following command 
+sudo systemctl enable mysqld --now
 
-    service mariadb start 
-To check if  mysql works, you can type **mysql** in the terminal and can login automatically and run sql commands also. But this is not a secured way , so we will secure mysql by giving password and set other options. You will be asked whether you need remote location, remove test users, test databases etc. It depends on you. We will allow remote connection here. To secure run this command. Enter blank password and set a password for root user.
+To stop the MySQL service:
 
-    /usr/bin/mysql_secure_installation
-Now you can login to mysql terminal by running this command and give password to login securely. 
+sudo systemctl stop mysqld
+To start the MySQL service:
 
-    mysql -uroot -p 
+sudo systemctl start mysqld
+To disable the MySQL service at system startup:
+
+sudo systemctl disable mysqld
+To activate the MySQL service at system startup:
+
+sudo systemctl enable mysqld
+To restart the MySQL service:
+
+sudo systemctl restart mysqld
+
+
 
 ### Install PHP 7.4 and some required extensions on centos 7 
 Before installing php, we will install yum utils which can handle additional package's extensions. 
